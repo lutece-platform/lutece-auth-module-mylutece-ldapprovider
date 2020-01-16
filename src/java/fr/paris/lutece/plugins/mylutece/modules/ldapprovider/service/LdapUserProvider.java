@@ -70,7 +70,7 @@ public class LdapUserProvider implements IUserInfosProvider
             user.setGivenName( ldapUser.getFirstName( ) );
             user.setLastName( ldapUser.getLastName( ) );
             user.setLogin( ldapUser.getLdapLogin( ) );
-            user.setproviderUserId( ldapUser.getLdapGuid( ) );
+            user.setProviderUserId( ldapUser.getLdapGuid( ) );
             localUserList.add( user );
         }
         return localUserList;
