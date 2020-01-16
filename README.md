@@ -4,7 +4,7 @@
 ##Introduction
 
 
-[Maven documentation and reports](http://dev.lutece.paris.fr/plugins/module-mylutece-users-ldap/)
+[Maven documentation and reports](http://dev.lutece.paris.fr/plugins/module-mylutece-ldapprovider/)
 
 
 
