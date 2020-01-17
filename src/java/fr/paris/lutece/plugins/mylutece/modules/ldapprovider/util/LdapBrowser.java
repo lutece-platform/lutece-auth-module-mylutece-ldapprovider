@@ -41,10 +41,6 @@ import fr.paris.lutece.util.ldap.LdapUtil;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
 import javax.naming.CommunicationException;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
@@ -64,11 +60,9 @@ public class LdapBrowser
     private static final String PROPERTY_BIND_DN = "mylutece-ldapprovider.ldap.connectionName";
     private static final String PROPERTY_BIND_PASSWORD = "mylutece-ldapprovider.ldap.connectionPassword";
     private static final String PROPERTY_USER_DN_SEARCH_BASE = "mylutece-ldapprovider.ldap.userBase";
-    private static final String PROPERTY_USER_DN_SEARCH_FILTER_BY_GUID = "mylutece-ldapprovider.ldap.userSearch.guid";
     private static final String PROPERTY_USER_DN_SEARCH_FILTER_BY_CRITERIA_SN = "mylutece-ldapprovider.ldap.userSearch.criteria.sn";
     private static final String PROPERTY_USER_DN_SEARCH_FILTER_BY_CRITERIA_GIVENNAME = "mylutece-ldapprovider.ldap.userSearch.criteria.givenname";
     private static final String PROPERTY_USER_DN_SEARCH_FILTER_BY_CRITERIA_MAIL = "mylutece-ldapprovider.ldap.userSearch.criteria.mail";
-
     private static final String PROPERTY_USER_SUBTREE = "mylutece-ldapprovider.ldap.userSubtree";
     private static final String PROPERTY_DN_ATTRIBUTE_GUID = "mylutece-ldapprovider.ldap.dn.attributeName.ldapGuid";
     private static final String PROPERTY_DN_ATTRIBUTE_LAST_NAME = "mylutece-ldapprovider.ldap.dn.attributeName.lastName";
@@ -76,32 +70,11 @@ public class LdapBrowser
     private static final String PROPERTY_DN_ATTRIBUTE_EMAIL = "mylutece-ldapprovider.ldap.dn.attributeName.email";
     private static final String PROPERTY_DN_ATTRIBUTE_LOGIN = "mylutece-ldapprovider.ldap.dn.attributeName.login";
 
-    private static final String PROPERTY_USER_DN_LOGIN = "mylutece-ldapprovider.ldap.dn.login";
-
     private static final String ATTRIBUTE_LOGIN = AppPropertiesService.getProperty( PROPERTY_DN_ATTRIBUTE_LOGIN );
     private static final String ATTRIBUTE_GUID = AppPropertiesService.getProperty( PROPERTY_DN_ATTRIBUTE_GUID );
     private static final String ATTRIBUTE_LAST_NAME = AppPropertiesService.getProperty( PROPERTY_DN_ATTRIBUTE_LAST_NAME );
     private static final String ATTRIBUTE_GIVEN_NAME = AppPropertiesService.getProperty( PROPERTY_DN_ATTRIBUTE_GIVEN_NAME );
     private static final String ATTRIBUTE_EMAIL = AppPropertiesService.getProperty( PROPERTY_DN_ATTRIBUTE_EMAIL );
-    /* comparator for sorting - date ascendant order */
-    private static final Comparator COMPARATOR_USER = new Comparator( )
-    {
-        public int compare( Object obj1, Object obj2 )
-        {
-            LdapUser user1 = (LdapUser) obj1;
-            LdapUser user2 = (LdapUser) obj2;
-            int nOrder = user1.getLastName( ).toUpperCase( ).compareTo( user2.getLastName( ).toUpperCase( ) );
-            if ( nOrder == 0 )
-            {
-                nOrder = user1.getFirstName( ).toUpperCase( ).compareTo( user2.getFirstName( ).toUpperCase( ) );
-                if ( nOrder == 0 )
-                {
-                    nOrder = user1.getEmail( ).toUpperCase( ).compareTo( user2.getEmail( ).toUpperCase( ) );
-                }
-            }
-            return nOrder;
-        }
-    };
     /**
      * Search controls for the user entry search
      */
@@ -118,30 +91,6 @@ public class LdapBrowser
     {
     }
 
-    public List<String> getAllAttributes( )
-    {
-        List<String> attributesNames = new ArrayList<>( );
-        try
-        {
-            DirContext schema = _context.getSchema( "" );
-            DirContext personSchema = (DirContext) schema.lookup( "ClassDefinition/idxwssoUser" );
-            NamingEnumeration allAttributes = personSchema.getAttributes( "MAY" ).getAll( );
-            while ( ( allAttributes != null ) && allAttributes.hasMore( ) )
-            {
-                attributesNames.add( allAttributes.next( ).toString( ) );
-            }
-        }
-        catch( NamingException e )
-        {
-            AppLogService.error( "Error while searching for users ", e );
-            return null;
-        }
-        finally
-        {
-            close( );
-        }
-        return attributesNames;
-    }
 
     /**
      * Returns a list of users corresponding to the given parameters. An empty parameter is remplaced by the wildcard (*)
@@ -167,7 +116,7 @@ public class LdapBrowser
         String strUserSearchFilter = buildRequest( messageFormatFilter, messageFormatParam );
         try
         {
-            NamingEnumeration userResults = LdapUtil.searchUsers( _context, strUserSearchFilter, getUserDnSearchBase( ), "", _scUserSearchControls );
+            NamingEnumeration<?> userResults = LdapUtil.searchUsers( _context, strUserSearchFilter, getUserDnSearchBase( ), "", _scUserSearchControls );
             while ( ( userResults != null ) && userResults.hasMore( ) )
             {
                 sr = (SearchResult) userResults.next( );
@@ -207,7 +156,6 @@ public class LdapBrowser
                 user.setLdapLogin( strLdapLogin );
                 userList.add( user );
             }
-            Collections.sort( userList, COMPARATOR_USER );
             return userList;
         }
         catch( CommunicationException e )
@@ -224,166 +172,6 @@ public class LdapBrowser
         {
             close( );
         }
-    }
-
-    /**
-     * Return a user given its guid
-     * 
-     * @param strGuid
-     *            the guid
-     * @return the corresponding user
-     */
-    public LdapUser getUserPublicData( String strGuid )
-    {
-        LdapUser user = null;
-        SearchResult sr = null;
-        Object [ ] messageFormatParam = new Object [ 1];
-        start( );
-        messageFormatParam [0] = strGuid;
-        String strUserSearchFilter = MessageFormat.format( getUserDnSearchFilterByGUID( ), messageFormatParam );
-        try
-        {
-            NamingEnumeration userResults = LdapUtil.searchUsers( _context, strUserSearchFilter, getUserDnSearchBase( ), "", _scUserSearchControls );
-            int count = 0;
-            while ( ( userResults != null ) && userResults.hasMore( ) )
-            {
-                sr = (SearchResult) userResults.next( );
-                Attributes attributes = sr.getAttributes( );
-                String strLdapId = "";
-                if ( attributes.get( ATTRIBUTE_GUID ) != null )
-                {
-                    strLdapId = attributes.get( ATTRIBUTE_GUID ).get( ).toString( );
-                }
-                String strLastName = "";
-                if ( attributes.get( ATTRIBUTE_LAST_NAME ) != null )
-                {
-                    strLastName = attributes.get( ATTRIBUTE_LAST_NAME ).get( ).toString( );
-                }
-                String strFirstName = "";
-                if ( attributes.get( ATTRIBUTE_GIVEN_NAME ) != null )
-                {
-                    strFirstName = attributes.get( ATTRIBUTE_GIVEN_NAME ).get( ).toString( );
-                }
-                String strEmail = "";
-                if ( attributes.get( ATTRIBUTE_EMAIL ) != null )
-                {
-                    strEmail = attributes.get( ATTRIBUTE_EMAIL ).get( ).toString( );
-                }
-                user = new LdapUser( );
-                user.setLdapGuid( strLdapId );
-                user.setLastName( strLastName );
-                user.setFirstName( strFirstName );
-                user.setEmail( strEmail );
-                count++;
-            }
-            // More than one user found (failure)
-            if ( count > 1 )
-            {
-                AppLogService.error( "More than one entry in the directory for id " + strGuid );
-                return null;
-            }
-            return user;
-        }
-        catch( CommunicationException e )
-        {
-            AppLogService.error( "Error while searching for users '" + "' with search filter : " + getDebugInfo( strUserSearchFilter ), e );
-            return null;
-        }
-        catch( NamingException e )
-        {
-            AppLogService.error( "Error while searching for users ", e );
-            return null;
-        }
-        finally
-        {
-            close( );
-        }
-    }
-
-    /**
-     * get the user guid corresponding to a login and password
-     *
-     *
-     * @param strLogin
-     *            the user login
-     * @param strPassword
-     *            the user password
-     * @param locale
-     *            the locale
-     * @return the user guid or null if the login or password are incorrect
-     */
-    public String getUserGuid( String strLogin, String strPassword, Locale locale )
-    {
-        String dn = null;
-        SearchResult sr = null;
-        Object [ ] messageFormatParam = new Object [ 1];
-        messageFormatParam [0] = strLogin;
-        String strLdapGuid = "";
-        start( );
-        String strUserSearchFilter = MessageFormat.format( getUserDnLogin( ), messageFormatParam );
-        try
-        {
-            NamingEnumeration userResults = LdapUtil.searchUsers( _context, strUserSearchFilter, getUserDnSearchBase( ), "", _scUserSearchControls );
-            int count = 0;
-            while ( ( userResults != null ) && userResults.hasMore( ) )
-            {
-                sr = (SearchResult) userResults.next( );
-                dn = sr.getName( ) + "," + getUserDnSearchBase( );
-                Attributes attributes = sr.getAttributes( );
-                if ( attributes.get( ATTRIBUTE_GUID ) != null )
-                {
-                    strLdapGuid = attributes.get( ATTRIBUTE_GUID ).get( ).toString( );
-                }
-                count++;
-            }
-            // More than one principal found (failure)
-            if ( count > 1 )
-            {
-                AppLogService.info( "More than one entry in the directory for " + strLogin );
-                return null;
-            }
-            // Unable to find the user
-            if ( dn == null )
-            {
-                AppLogService.info( "Unable to find user in the directory : " + strLogin );
-                return null;
-            }
-        }
-        catch( CommunicationException e )
-        {
-            AppLogService.error( "Error while searching for user '" + strLogin + "' with search filter : " + getDebugInfo( strUserSearchFilter ), e );
-            return null;
-        }
-        catch( NamingException e )
-        {
-            AppLogService.error( "Error while searching for user '" + strLogin + "' with search filter : " + getDebugInfo( strUserSearchFilter ), e );
-            return null;
-        }
-        // STEP 2 : authenticate (bind)
-        try
-        {
-            _context = LdapUtil.bindUser( getInitialContextProvider( ), getProviderUrl( ), dn, strPassword );
-        }
-        catch( NamingException e )
-        {
-            AppLogService.error( "Error during the bind of " + dn + "(" + strLogin + ")", e );
-            return null;
-        }
-        finally
-        {
-            close( );
-        }
-        return strLdapGuid;
-    }
-
-    /**
-     * Get the field to compare with login
-     * 
-     * @return
-     */
-    private String getUserDnLogin( )
-    {
-        return AppPropertiesService.getProperty( PROPERTY_USER_DN_LOGIN );
     }
 
     /**
@@ -441,16 +229,6 @@ public class LdapBrowser
     private String getUserDnSearchBase( )
     {
         return AppPropertiesService.getProperty( PROPERTY_USER_DN_SEARCH_BASE );
-    }
-
-    /**
-     * Get the filter for search by guid
-     * 
-     * @return
-     */
-    private String getUserDnSearchFilterByGUID( )
-    {
-        return AppPropertiesService.getProperty( PROPERTY_USER_DN_SEARCH_FILTER_BY_GUID );
     }
 
     /**
