@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="ISO-8859-1" standalone="no"?><plug-in>
    <name>mylutece-ldapprovider</name>
-   <class>fr.paris.lutece.plugins.mylutece.modules.ldapprovider.service.LdapProviderPlugin</class>
-   <version>2.1.1</version>
+   <class>fr.paris.lutece.portal.service.plugin.PluginDefaultImplementation</class>
+   <version>1.0.0</version>
    <description>module.mylutece.ldapprovider.module.description</description>
    <documentation/>
    <installation/>
@@ -12,12 +12,9 @@
    <icon-url>images/admin/skin/plugins/mylutece/mylutece.png</icon-url>
    <copyright>Copyright 2019 - Mairie de Paris</copyright>
 	<core-version-dependency>
-		<min-core-version>2.4.1</min-core-version>
+		<min-core-version>7.0.0</min-core-version>
 		<max-core-version/>	
 	</core-version-dependency>
-	
 	<!-- if the plugin must have a connection pool with parameter : 1 - yes, 0 - no -->   
    <db-pool-required>1</db-pool-required>
-
-   
 </plug-in>
