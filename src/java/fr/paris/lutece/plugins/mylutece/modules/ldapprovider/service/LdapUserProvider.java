@@ -47,17 +47,15 @@ import java.util.ArrayList;
  */
 public class LdapUserProvider implements IUserInfosProvider
 {
-    private static final String CONSTANT_WILDCARD = "*";
-
     @Override
-    public List<LocalUser> findUsersByLastName( String strUserLastName )
+    public List<LocalUser> findUsers( String strUserLastName, String strParameterGivenName, String strParameterCriteriaMail )
     {
         LdapBrowser ldap = new LdapBrowser( );
         Collection<LdapUser> userList = null;
         List<LocalUser> localUserList = new ArrayList<>( );
         try
         {
-            userList = ldap.getUserList( strUserLastName + CONSTANT_WILDCARD );
+            userList = ldap.getUserList( strUserLastName, strParameterGivenName, strParameterCriteriaMail );
         }
         catch( Exception e )
         {

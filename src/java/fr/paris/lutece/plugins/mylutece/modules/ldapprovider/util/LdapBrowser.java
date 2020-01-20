@@ -45,6 +45,7 @@ import javax.naming.CommunicationException;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 import javax.naming.directory.Attributes;
+import javax.naming.directory.Attribute;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.SearchControls;
 import javax.naming.directory.SearchResult;
@@ -69,12 +70,18 @@ public class LdapBrowser
     private static final String PROPERTY_DN_ATTRIBUTE_GIVEN_NAME = "mylutece-ldapprovider.ldap.dn.attributeName.givenName";
     private static final String PROPERTY_DN_ATTRIBUTE_EMAIL = "mylutece-ldapprovider.ldap.dn.attributeName.email";
     private static final String PROPERTY_DN_ATTRIBUTE_LOGIN = "mylutece-ldapprovider.ldap.dn.attributeName.login";
+    private static final String PROPERTY_WILDCARD = "mylutece-ldapprovider.wildcard";
+    private static final String PROPERTY_WILDCARD_MIN_LENGTH = "mylutece-ldapprovider.wildcard.miniumLength";
 
     private static final String ATTRIBUTE_LOGIN = AppPropertiesService.getProperty( PROPERTY_DN_ATTRIBUTE_LOGIN );
     private static final String ATTRIBUTE_GUID = AppPropertiesService.getProperty( PROPERTY_DN_ATTRIBUTE_GUID );
     private static final String ATTRIBUTE_LAST_NAME = AppPropertiesService.getProperty( PROPERTY_DN_ATTRIBUTE_LAST_NAME );
     private static final String ATTRIBUTE_GIVEN_NAME = AppPropertiesService.getProperty( PROPERTY_DN_ATTRIBUTE_GIVEN_NAME );
     private static final String ATTRIBUTE_EMAIL = AppPropertiesService.getProperty( PROPERTY_DN_ATTRIBUTE_EMAIL );
+    private static final String ATTRIBUTE_WILCARD = AppPropertiesService.getProperty( PROPERTY_WILDCARD );
+    private static final String ATTRIBUTE_WILCARD_MIN_LENGTH = AppPropertiesService.getProperty( PROPERTY_WILDCARD_MIN_LENGTH );
+
+    private static final String PARAMETER_BLANK = "";
     /**
      * Search controls for the user entry search
      */
@@ -91,7 +98,6 @@ public class LdapBrowser
     {
     }
 
-
     /**
      * Returns a list of users corresponding to the given parameters. An empty parameter is remplaced by the wildcard (*)
      *
@@ -100,16 +106,17 @@ public class LdapBrowser
      * @param strParameterEmail
      * @return the LdapUser list
      */
-    public Collection<LdapUser> getUserList( String strParameterLastName )
+    public Collection<LdapUser> getUserList( String strParameterLastName, String strParameterGivenName, String strParameterCriteriaMail )
     {
+
         ArrayList<LdapUser> userList = new ArrayList<LdapUser>( );
         SearchResult sr = null;
         Object [ ] messageFormatParam = new Object [ 3];
         String [ ] messageFormatFilter = new String [ 3];
         start( );
-        messageFormatParam [0] = checkSyntax( strParameterLastName );
-        messageFormatParam [1] = checkSyntax( "" );
-        messageFormatParam [2] = checkSyntax( "" );
+        messageFormatParam [0] = checkCriteriaParameterSyntax( strParameterLastName );
+        messageFormatParam [1] = checkCriteriaParameterSyntax( strParameterGivenName );
+        messageFormatParam [2] = checkCriteriaParameterSyntax( strParameterCriteriaMail );
         messageFormatFilter [0] = getUserDnSearchFilterByCriteriaSn( );
         messageFormatFilter [1] = getUserDnSearchFilterByCriteriaGivenname( );
         messageFormatFilter [2] = getUserDnSearchFilterByCriteriaMail( );
@@ -121,40 +128,16 @@ public class LdapBrowser
             {
                 sr = (SearchResult) userResults.next( );
                 Attributes attributes = sr.getAttributes( );
-
-                String strLdapLogin = "";
-                if ( attributes.get( ATTRIBUTE_LOGIN ) != null )
-                {
-                    strLdapLogin = attributes.get( ATTRIBUTE_LOGIN ).get( ).toString( );
-                }
-
-                String strLdapId = "";
+                LdapUser user = new LdapUser( );
                 if ( attributes.get( ATTRIBUTE_GUID ) != null )
                 {
-                    strLdapId = attributes.get( ATTRIBUTE_GUID ).get( ).toString( );
+                    user.setLdapGuid( (String) attributes.get( ATTRIBUTE_GUID ).get( ) );
+                    user.setLastName( checkAttributeSyntax( attributes.get( ATTRIBUTE_LAST_NAME ) ) );
+                    user.setFirstName( checkAttributeSyntax( attributes.get( ATTRIBUTE_GIVEN_NAME ) ) );
+                    user.setEmail( checkAttributeSyntax( attributes.get( ATTRIBUTE_EMAIL ) ) );
+                    user.setLdapLogin( checkAttributeSyntax( attributes.get( ATTRIBUTE_LOGIN ) ) );
+                    userList.add( user );
                 }
-                String strLastName = "";
-                if ( attributes.get( ATTRIBUTE_LAST_NAME ) != null )
-                {
-                    strLastName = attributes.get( ATTRIBUTE_LAST_NAME ).get( ).toString( );
-                }
-                String strFirstName = "";
-                if ( attributes.get( ATTRIBUTE_GIVEN_NAME ) != null )
-                {
-                    strFirstName = attributes.get( ATTRIBUTE_GIVEN_NAME ).get( ).toString( );
-                }
-                String strEmail = "";
-                if ( attributes.get( ATTRIBUTE_EMAIL ) != null )
-                {
-                    strEmail = attributes.get( ATTRIBUTE_EMAIL ).get( ).toString( );
-                }
-                LdapUser user = new LdapUser( );
-                user.setLdapGuid( strLdapId );
-                user.setLastName( strLastName );
-                user.setFirstName( strFirstName );
-                user.setEmail( strEmail );
-                user.setLdapLogin( strLdapLogin );
-                userList.add( user );
             }
             return userList;
         }
@@ -175,15 +158,40 @@ public class LdapBrowser
     }
 
     /**
-     * Replace the null string or empty string by the wilcard
+     * Return a complient criterial parameter according to wildcard properties
+     * 
+     * @param strCriteriaParameterValue
+     * @return
+     */
+    private String checkCriteriaParameterSyntax( String strCriteriaParameterValue )
+    {
+        if( strCriteriaParameterValue == null || strCriteriaParameterValue.isEmpty( ) ) {
+            strCriteriaParameterValue = ATTRIBUTE_WILCARD;
+        }
+        if ( ATTRIBUTE_WILCARD != null && ATTRIBUTE_WILCARD_MIN_LENGTH != null ) {
+            if( strCriteriaParameterValue.length( ) >=  Integer.parseInt( ATTRIBUTE_WILCARD_MIN_LENGTH )  ) {
+                strCriteriaParameterValue = strCriteriaParameterValue + ATTRIBUTE_WILCARD;
+            }
+        }
+        return strCriteriaParameterValue;
+    }
+
+    /**
+     * Return a complient criterial parameter
      * 
      * @param in
      * @return
+     * @throws NamingException
      */
-    private String checkSyntax( String in )
+    private String checkAttributeSyntax(Attribute attribute) throws NamingException
     {
-        return ( ( ( in == null ) || ( in.equals( "" ) ) ) ? "*" : in );
+        String strAttributeValue = "";
+        if( attribute != null ) {
+            strAttributeValue = (String) attribute.get();
+        }
+        return strAttributeValue.toString();
     }
+
 
     /**
      * Return info for debugging
