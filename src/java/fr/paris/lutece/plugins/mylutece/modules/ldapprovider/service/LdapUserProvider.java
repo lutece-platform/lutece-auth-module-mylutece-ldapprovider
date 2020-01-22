@@ -78,7 +78,8 @@ public class LdapUserProvider implements IUserInfosProvider
     }
 
     @Override
-    public List<String> getAllAttributes() {
+    public List<String> getAllAttributes( )
+    {
         LdapBrowser ldap = new LdapBrowser( );
         List<String> attributeList = null;
         try

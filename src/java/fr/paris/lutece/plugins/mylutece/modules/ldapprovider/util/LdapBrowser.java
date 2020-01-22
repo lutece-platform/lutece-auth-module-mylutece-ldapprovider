@@ -87,7 +87,6 @@ public class LdapBrowser
     private static final String ATTRIBUTE_WILCARD_MIN_LENGTH = AppPropertiesService.getProperty( PROPERTY_WILDCARD_MIN_LENGTH );
     private static final String ATTRIBUTE_USER_OBJECT_CLASS = AppPropertiesService.getProperty( PROPERTY_USER_OBJECT_CLASS );
 
-
     /**
      * Search controls for the user entry search
      */
@@ -113,15 +112,17 @@ public class LdapBrowser
      * @param listProviderAttribute
      * @return the LdapUser list
      */
-    public Collection<LdapUser> getUserList( String strParameterLastName, String strParameterGivenName, String strParameterCriteriaMail, ReferenceList listProviderAttribute )
+    public Collection<LdapUser> getUserList( String strParameterLastName, String strParameterGivenName, String strParameterCriteriaMail,
+            ReferenceList listProviderAttribute )
     {
         ArrayList<LdapUser> userList = new ArrayList<LdapUser>( );
         SearchResult sr = null;
-        if(isEmptySearchRequest(strParameterLastName, strParameterGivenName, strParameterCriteriaMail, listProviderAttribute)) {
+        if ( isEmptySearchRequest( strParameterLastName, strParameterGivenName, strParameterCriteriaMail, listProviderAttribute ) )
+        {
             return userList;
         }
-        Object [ ] messageFormatParam = new Object [ 3 + listProviderAttribute.size( ) ];
-        String [ ] messageFormatFilter = new String [ 3 + listProviderAttribute.size( ) ];
+        Object [ ] messageFormatParam = new Object [ 3 + listProviderAttribute.size( )];
+        String [ ] messageFormatFilter = new String [ 3 + listProviderAttribute.size( )];
         start( );
         messageFormatParam [0] = checkCriteriaParameterSyntax( strParameterLastName );
         messageFormatParam [1] = checkCriteriaParameterSyntax( strParameterGivenName );
@@ -130,8 +131,9 @@ public class LdapBrowser
         messageFormatFilter [1] = getUserDnSearchFilterByCriteriaGivenname( );
         messageFormatFilter [2] = getUserDnSearchFilterByCriteriaMail( );
         int position = 3;
-        for(ReferenceItem providerAttribute : listProviderAttribute ) {
-            messageFormatParam [position] = checkCriteriaParameterSyntax( providerAttribute.getCode() );
+        for ( ReferenceItem providerAttribute : listProviderAttribute )
+        {
+            messageFormatParam [position] = checkCriteriaParameterSyntax( providerAttribute.getCode( ) );
             messageFormatFilter [position] = "(" + providerAttribute.getName( ) + "=" + "{" + position + "})";
             position++;
         }
@@ -173,25 +175,28 @@ public class LdapBrowser
         }
     }
 
-      /**
+    /**
      * Returns a list of attributes valued from search result
      *
      * @return the attribute list
      * @throws NamingException
      */
-    public ReferenceList getAttributeWithResultValue(Attributes attributes, ReferenceList listProviderAttribute)
-            throws NamingException
+    public ReferenceList getAttributeWithResultValue( Attributes attributes, ReferenceList listProviderAttribute ) throws NamingException
     {
-        ReferenceList listUserProviderAttribute = new ReferenceList();
-        for(ReferenceItem providerAttribute : listProviderAttribute ) {
-            ReferenceItem userProviderAttribute = new ReferenceItem();
-            userProviderAttribute.setName(providerAttribute.getName());
-            if(attributes.get( providerAttribute.getName( ) ) != null ) {
+        ReferenceList listUserProviderAttribute = new ReferenceList( );
+        for ( ReferenceItem providerAttribute : listProviderAttribute )
+        {
+            ReferenceItem userProviderAttribute = new ReferenceItem( );
+            userProviderAttribute.setName( providerAttribute.getName( ) );
+            if ( attributes.get( providerAttribute.getName( ) ) != null )
+            {
                 userProviderAttribute.setCode( attributes.get( providerAttribute.getName( ) ).get( ).toString( ) );
-            } else {
-                userProviderAttribute.setCode( null ); 
             }
-            listUserProviderAttribute.add(userProviderAttribute);
+            else
+            {
+                userProviderAttribute.setCode( null );
+            }
+            listUserProviderAttribute.add( userProviderAttribute );
         }
         return listUserProviderAttribute;
     }
@@ -209,12 +214,14 @@ public class LdapBrowser
             start( );
             DirContext schema = _context.getSchema( "" );
             BasicAttributes basicAttributes = (BasicAttributes) schema.getAttributes( "ClassDefinition/" + ATTRIBUTE_USER_OBJECT_CLASS );
-            NamingEnumeration<Attribute> basicAttributesList = basicAttributes.getAll();
+            NamingEnumeration<Attribute> basicAttributesList = basicAttributes.getAll( );
             Attribute basicAttribute = null;
-            while ( ( basicAttributesList != null ) && basicAttributesList.hasMore( ) ) {
-                basicAttribute = basicAttributesList.next();
-                NamingEnumeration<?> attributesList = basicAttribute.getAll();
-                while ( ( attributesList != null ) && attributesList.hasMore( ) ) {
+            while ( ( basicAttributesList != null ) && basicAttributesList.hasMore( ) )
+            {
+                basicAttribute = basicAttributesList.next( );
+                NamingEnumeration<?> attributesList = basicAttribute.getAll( );
+                while ( ( attributesList != null ) && attributesList.hasMore( ) )
+                {
                     attributesNames.add( attributesList.next( ).toString( ) );
                 }
             }
@@ -239,18 +246,20 @@ public class LdapBrowser
      */
     private String checkCriteriaParameterSyntax( String strCriteriaParameterValue )
     {
-        if( strCriteriaParameterValue == null || strCriteriaParameterValue.isEmpty( ) ) {
+        if ( strCriteriaParameterValue == null || strCriteriaParameterValue.isEmpty( ) )
+        {
             strCriteriaParameterValue = ATTRIBUTE_WILCARD;
         }
-        if ( ATTRIBUTE_WILCARD != null && ATTRIBUTE_WILCARD_MIN_LENGTH != null ) {
-            if( strCriteriaParameterValue.length( ) >=  Integer.parseInt( ATTRIBUTE_WILCARD_MIN_LENGTH )  ) {
+        if ( ATTRIBUTE_WILCARD != null && ATTRIBUTE_WILCARD_MIN_LENGTH != null )
+        {
+            if ( strCriteriaParameterValue.length( ) >= Integer.parseInt( ATTRIBUTE_WILCARD_MIN_LENGTH ) )
+            {
                 strCriteriaParameterValue = strCriteriaParameterValue + ATTRIBUTE_WILCARD;
             }
         }
         return strCriteriaParameterValue;
     }
 
-    
     /**
      * Returns a list of users corresponding to the given parameters. An empty parameter is remplaced by the wildcard (*)
      *
@@ -260,13 +269,17 @@ public class LdapBrowser
      * @param listProviderAttribute
      * @return true if all criterias are empty
      */
-    private boolean isEmptySearchRequest(String strParameterLastName, String strParameterGivenName,String strParameterCriteriaMail, ReferenceList listProviderAttribute) {
-        if (!strParameterLastName.isEmpty() || !strParameterGivenName.isEmpty()
-                || !strParameterCriteriaMail.isEmpty()) {
+    private boolean isEmptySearchRequest( String strParameterLastName, String strParameterGivenName, String strParameterCriteriaMail,
+            ReferenceList listProviderAttribute )
+    {
+        if ( !strParameterLastName.isEmpty( ) || !strParameterGivenName.isEmpty( ) || !strParameterCriteriaMail.isEmpty( ) )
+        {
             return false;
         }
-        for (ReferenceItem referenceItem : listProviderAttribute) {
-            if (!referenceItem.getCode().isEmpty()) {
+        for ( ReferenceItem referenceItem : listProviderAttribute )
+        {
+            if ( !referenceItem.getCode( ).isEmpty( ) )
+            {
                 return false;
             }
         }
@@ -280,15 +293,15 @@ public class LdapBrowser
      * @return
      * @throws NamingException
      */
-    private String checkAttributeSyntax(Attribute attribute) throws NamingException
+    private String checkAttributeSyntax( Attribute attribute ) throws NamingException
     {
         String strAttributeValue = "";
-        if( attribute != null ) {
-            strAttributeValue = (String) attribute.get();
+        if ( attribute != null )
+        {
+            strAttributeValue = (String) attribute.get( );
         }
-        return strAttributeValue.toString();
+        return strAttributeValue.toString( );
     }
-
 
     /**
      * Return info for debugging

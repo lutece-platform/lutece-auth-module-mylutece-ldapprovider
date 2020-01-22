@@ -183,7 +183,7 @@ public class LdapUser
         _strLastName = strLastName;
     }
 
-      /**
+    /**
      * Returns the Attributes
      *
      * @return The Attributes
@@ -203,6 +203,5 @@ public class LdapUser
     {
         _strAttributes = strAttributes;
     }
-
 
 }
