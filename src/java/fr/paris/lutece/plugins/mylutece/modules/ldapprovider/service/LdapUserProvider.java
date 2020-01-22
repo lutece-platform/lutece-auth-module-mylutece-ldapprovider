@@ -40,6 +40,8 @@ import fr.paris.lutece.plugins.mylutece.modules.ldapprovider.util.LdapBrowser;
 import fr.paris.lutece.plugins.mylutece.modules.users.business.LocalUser;
 import fr.paris.lutece.plugins.mylutece.modules.users.service.IUserInfosProvider;
 import fr.paris.lutece.portal.service.util.AppLogService;
+import fr.paris.lutece.util.ReferenceList;
+
 import java.util.ArrayList;
 
 /**
@@ -48,14 +50,14 @@ import java.util.ArrayList;
 public class LdapUserProvider implements IUserInfosProvider
 {
     @Override
-    public List<LocalUser> findUsers( String strUserLastName, String strParameterGivenName, String strParameterCriteriaMail )
+    public List<LocalUser> findUsers( String strUserLastName, String strParameterGivenName, String strParameterCriteriaMail, ReferenceList listProviderAttribute )
     {
         LdapBrowser ldap = new LdapBrowser( );
         Collection<LdapUser> userList = null;
         List<LocalUser> localUserList = new ArrayList<>( );
         try
         {
-            userList = ldap.getUserList( strUserLastName, strParameterGivenName, strParameterCriteriaMail );
+            userList = ldap.getUserList( strUserLastName, strParameterGivenName, strParameterCriteriaMail, listProviderAttribute );
         }
         catch( Exception e )
         {
@@ -69,8 +71,24 @@ public class LdapUserProvider implements IUserInfosProvider
             user.setLastName( ldapUser.getLastName( ) );
             user.setLogin( ldapUser.getLdapLogin( ) );
             user.setProviderUserId( ldapUser.getLdapGuid( ) );
+            user.setAttributes( ldapUser.getAttributes( ) );
             localUserList.add( user );
         }
         return localUserList;
+    }
+
+    @Override
+    public List<String> getAllAttributes() {
+        LdapBrowser ldap = new LdapBrowser( );
+        List<String> attributeList = null;
+        try
+        {
+            attributeList = ldap.getAllAttributes( );
+        }
+        catch( Exception e )
+        {
+            AppLogService.error( e.getMessage( ), e );
+        }
+        return attributeList;
     }
 }

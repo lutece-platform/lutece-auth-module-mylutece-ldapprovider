@@ -33,6 +33,8 @@
  */
 package fr.paris.lutece.plugins.mylutece.modules.ldapprovider.business;
 
+import fr.paris.lutece.util.ReferenceList;
+
 /**
  * This class represents the business object LdapUser
  */
@@ -45,6 +47,7 @@ public class LdapUser
     private String _strLastName;
     private String _strFirstName;
     private String _strEmail;
+    private ReferenceList _strAttributes;
 
     /**
      * Initialize the LdapDatabaseUser
@@ -179,5 +182,27 @@ public class LdapUser
     {
         _strLastName = strLastName;
     }
+
+      /**
+     * Returns the Attributes
+     *
+     * @return The Attributes
+     */
+    public ReferenceList getAttributes( )
+    {
+        return _strAttributes;
+    }
+
+    /**
+     * Sets the Attributes
+     *
+     * @param strAttributes
+     *            The Attributes
+     */
+    public void setAttributes( ReferenceList strAttributes )
+    {
+        _strAttributes = strAttributes;
+    }
+
 
 }
