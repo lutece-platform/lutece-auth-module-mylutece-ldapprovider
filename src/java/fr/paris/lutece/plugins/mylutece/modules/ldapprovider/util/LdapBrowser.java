@@ -37,14 +37,18 @@ import fr.paris.lutece.plugins.mylutece.modules.ldapprovider.business.LdapUser;
 import fr.paris.lutece.portal.service.util.AppException;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
+import fr.paris.lutece.util.ReferenceItem;
+import fr.paris.lutece.util.ReferenceList;
 import fr.paris.lutece.util.ldap.LdapUtil;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import javax.naming.CommunicationException;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 import javax.naming.directory.Attributes;
+import javax.naming.directory.BasicAttributes;
 import javax.naming.directory.Attribute;
 import javax.naming.directory.DirContext;
 import javax.naming.directory.SearchControls;
@@ -65,6 +69,7 @@ public class LdapBrowser
     private static final String PROPERTY_USER_DN_SEARCH_FILTER_BY_CRITERIA_GIVENNAME = "mylutece-ldapprovider.ldap.userSearch.criteria.givenname";
     private static final String PROPERTY_USER_DN_SEARCH_FILTER_BY_CRITERIA_MAIL = "mylutece-ldapprovider.ldap.userSearch.criteria.mail";
     private static final String PROPERTY_USER_SUBTREE = "mylutece-ldapprovider.ldap.userSubtree";
+    private static final String PROPERTY_USER_OBJECT_CLASS = "mylutece-ldapprovider.ldap.userObjectClass";
     private static final String PROPERTY_DN_ATTRIBUTE_GUID = "mylutece-ldapprovider.ldap.dn.attributeName.ldapGuid";
     private static final String PROPERTY_DN_ATTRIBUTE_LAST_NAME = "mylutece-ldapprovider.ldap.dn.attributeName.lastName";
     private static final String PROPERTY_DN_ATTRIBUTE_GIVEN_NAME = "mylutece-ldapprovider.ldap.dn.attributeName.givenName";
@@ -80,8 +85,8 @@ public class LdapBrowser
     private static final String ATTRIBUTE_EMAIL = AppPropertiesService.getProperty( PROPERTY_DN_ATTRIBUTE_EMAIL );
     private static final String ATTRIBUTE_WILCARD = AppPropertiesService.getProperty( PROPERTY_WILDCARD );
     private static final String ATTRIBUTE_WILCARD_MIN_LENGTH = AppPropertiesService.getProperty( PROPERTY_WILDCARD_MIN_LENGTH );
+    private static final String ATTRIBUTE_USER_OBJECT_CLASS = AppPropertiesService.getProperty( PROPERTY_USER_OBJECT_CLASS );
 
-    private static final String PARAMETER_BLANK = "";
     /**
      * Search controls for the user entry search
      */
@@ -104,15 +109,20 @@ public class LdapBrowser
      * @param strParameterLastName
      * @param strParameterFirstName
      * @param strParameterEmail
+     * @param listProviderAttribute
      * @return the LdapUser list
      */
-    public Collection<LdapUser> getUserList( String strParameterLastName, String strParameterGivenName, String strParameterCriteriaMail )
+    public Collection<LdapUser> getUserList( String strParameterLastName, String strParameterGivenName, String strParameterCriteriaMail,
+            ReferenceList listProviderAttribute )
     {
-
         ArrayList<LdapUser> userList = new ArrayList<LdapUser>( );
         SearchResult sr = null;
-        Object [ ] messageFormatParam = new Object [ 3];
-        String [ ] messageFormatFilter = new String [ 3];
+        if ( isEmptySearchRequest( strParameterLastName, strParameterGivenName, strParameterCriteriaMail, listProviderAttribute ) )
+        {
+            return userList;
+        }
+        Object [ ] messageFormatParam = new Object [ 3 + listProviderAttribute.size( )];
+        String [ ] messageFormatFilter = new String [ 3 + listProviderAttribute.size( )];
         start( );
         messageFormatParam [0] = checkCriteriaParameterSyntax( strParameterLastName );
         messageFormatParam [1] = checkCriteriaParameterSyntax( strParameterGivenName );
@@ -120,6 +130,13 @@ public class LdapBrowser
         messageFormatFilter [0] = getUserDnSearchFilterByCriteriaSn( );
         messageFormatFilter [1] = getUserDnSearchFilterByCriteriaGivenname( );
         messageFormatFilter [2] = getUserDnSearchFilterByCriteriaMail( );
+        int position = 3;
+        for ( ReferenceItem providerAttribute : listProviderAttribute )
+        {
+            messageFormatParam [position] = checkCriteriaParameterSyntax( providerAttribute.getCode( ) );
+            messageFormatFilter [position] = "(" + providerAttribute.getName( ) + "=" + "{" + position + "})";
+            position++;
+        }
         String strUserSearchFilter = buildRequest( messageFormatFilter, messageFormatParam );
         try
         {
@@ -136,6 +153,7 @@ public class LdapBrowser
                     user.setFirstName( checkAttributeSyntax( attributes.get( ATTRIBUTE_GIVEN_NAME ) ) );
                     user.setEmail( checkAttributeSyntax( attributes.get( ATTRIBUTE_EMAIL ) ) );
                     user.setLdapLogin( checkAttributeSyntax( attributes.get( ATTRIBUTE_LOGIN ) ) );
+                    user.setAttributes( getAttributeWithResultValue( attributes, listProviderAttribute ) );
                     userList.add( user );
                 }
             }
@@ -158,6 +176,69 @@ public class LdapBrowser
     }
 
     /**
+     * Returns a list of attributes valued from search result
+     *
+     * @return the attribute list
+     * @throws NamingException
+     */
+    public ReferenceList getAttributeWithResultValue( Attributes attributes, ReferenceList listProviderAttribute ) throws NamingException
+    {
+        ReferenceList listUserProviderAttribute = new ReferenceList( );
+        for ( ReferenceItem providerAttribute : listProviderAttribute )
+        {
+            ReferenceItem userProviderAttribute = new ReferenceItem( );
+            userProviderAttribute.setName( providerAttribute.getName( ) );
+            if ( attributes.get( providerAttribute.getName( ) ) != null )
+            {
+                userProviderAttribute.setCode( attributes.get( providerAttribute.getName( ) ).get( ).toString( ) );
+            }
+            else
+            {
+                userProviderAttribute.setCode( null );
+            }
+            listUserProviderAttribute.add( userProviderAttribute );
+        }
+        return listUserProviderAttribute;
+    }
+
+    /**
+     * Returns a list of all attributes from ldap schema
+     *
+     * @return the attribute list
+     */
+    public List<String> getAllAttributes( )
+    {
+        List<String> attributesNames = new ArrayList<>( );
+        try
+        {
+            start( );
+            DirContext schema = _context.getSchema( "" );
+            BasicAttributes basicAttributes = (BasicAttributes) schema.getAttributes( "ClassDefinition/" + ATTRIBUTE_USER_OBJECT_CLASS );
+            NamingEnumeration<Attribute> basicAttributesList = basicAttributes.getAll( );
+            Attribute basicAttribute = null;
+            while ( ( basicAttributesList != null ) && basicAttributesList.hasMore( ) )
+            {
+                basicAttribute = basicAttributesList.next( );
+                NamingEnumeration<?> attributesList = basicAttribute.getAll( );
+                while ( ( attributesList != null ) && attributesList.hasMore( ) )
+                {
+                    attributesNames.add( attributesList.next( ).toString( ) );
+                }
+            }
+        }
+        catch( NamingException e )
+        {
+            AppLogService.error( "Error while getting all attributes", e );
+            return null;
+        }
+        finally
+        {
+            close( );
+        }
+        return attributesNames;
+    }
+
+    /**
      * Return a complient criterial parameter according to wildcard properties
      * 
      * @param strCriteriaParameterValue
@@ -165,15 +246,44 @@ public class LdapBrowser
      */
     private String checkCriteriaParameterSyntax( String strCriteriaParameterValue )
     {
-        if( strCriteriaParameterValue == null || strCriteriaParameterValue.isEmpty( ) ) {
+        if ( strCriteriaParameterValue == null || strCriteriaParameterValue.isEmpty( ) )
+        {
             strCriteriaParameterValue = ATTRIBUTE_WILCARD;
         }
-        if ( ATTRIBUTE_WILCARD != null && ATTRIBUTE_WILCARD_MIN_LENGTH != null ) {
-            if( strCriteriaParameterValue.length( ) >=  Integer.parseInt( ATTRIBUTE_WILCARD_MIN_LENGTH )  ) {
+        if ( ATTRIBUTE_WILCARD != null && ATTRIBUTE_WILCARD_MIN_LENGTH != null )
+        {
+            if ( strCriteriaParameterValue.length( ) >= Integer.parseInt( ATTRIBUTE_WILCARD_MIN_LENGTH ) )
+            {
                 strCriteriaParameterValue = strCriteriaParameterValue + ATTRIBUTE_WILCARD;
             }
         }
         return strCriteriaParameterValue;
+    }
+
+    /**
+     * Returns a list of users corresponding to the given parameters. An empty parameter is remplaced by the wildcard (*)
+     *
+     * @param strParameterLastName
+     * @param strParameterFirstName
+     * @param strParameterEmail
+     * @param listProviderAttribute
+     * @return true if all criterias are empty
+     */
+    private boolean isEmptySearchRequest( String strParameterLastName, String strParameterGivenName, String strParameterCriteriaMail,
+            ReferenceList listProviderAttribute )
+    {
+        if ( !strParameterLastName.isEmpty( ) || !strParameterGivenName.isEmpty( ) || !strParameterCriteriaMail.isEmpty( ) )
+        {
+            return false;
+        }
+        for ( ReferenceItem referenceItem : listProviderAttribute )
+        {
+            if ( !referenceItem.getCode( ).isEmpty( ) )
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -183,15 +293,15 @@ public class LdapBrowser
      * @return
      * @throws NamingException
      */
-    private String checkAttributeSyntax(Attribute attribute) throws NamingException
+    private String checkAttributeSyntax( Attribute attribute ) throws NamingException
     {
         String strAttributeValue = "";
-        if( attribute != null ) {
-            strAttributeValue = (String) attribute.get();
+        if ( attribute != null )
+        {
+            strAttributeValue = (String) attribute.get( );
         }
-        return strAttributeValue.toString();
+        return strAttributeValue.toString( );
     }
-
 
     /**
      * Return info for debugging
