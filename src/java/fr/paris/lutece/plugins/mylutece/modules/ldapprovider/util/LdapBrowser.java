@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2019, Mairie de Paris
+ * Copyright (c) 2002-2020, City of Paris
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,6 +44,9 @@ import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
+
+import javax.naming.Binding;
 import javax.naming.CommunicationException;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
@@ -69,7 +72,8 @@ public class LdapBrowser
     private static final String PROPERTY_USER_DN_SEARCH_FILTER_BY_CRITERIA_GIVENNAME = "mylutece-ldapprovider.ldap.userSearch.criteria.givenname";
     private static final String PROPERTY_USER_DN_SEARCH_FILTER_BY_CRITERIA_MAIL = "mylutece-ldapprovider.ldap.userSearch.criteria.mail";
     private static final String PROPERTY_USER_SUBTREE = "mylutece-ldapprovider.ldap.userSubtree";
-    private static final String PROPERTY_USER_OBJECT_CLASS = "mylutece-ldapprovider.ldap.userObjectClass";
+    private static final String PROPERTY_MAPPING_OBJECT_CLASS_LIST = "mylutece-ldapprovider.ldap.mapping.objectClassList";
+    private static final String PROPERTY_MAPPING_ATTRIBUTE_LIST = "mylutece-ldapprovider.ldap.mapping.attributeNameList";
     private static final String PROPERTY_DN_ATTRIBUTE_GUID = "mylutece-ldapprovider.ldap.dn.attributeName.ldapGuid";
     private static final String PROPERTY_DN_ATTRIBUTE_LAST_NAME = "mylutece-ldapprovider.ldap.dn.attributeName.lastName";
     private static final String PROPERTY_DN_ATTRIBUTE_GIVEN_NAME = "mylutece-ldapprovider.ldap.dn.attributeName.givenName";
@@ -85,7 +89,8 @@ public class LdapBrowser
     private static final String ATTRIBUTE_EMAIL = AppPropertiesService.getProperty( PROPERTY_DN_ATTRIBUTE_EMAIL );
     private static final String ATTRIBUTE_WILCARD = AppPropertiesService.getProperty( PROPERTY_WILDCARD );
     private static final String ATTRIBUTE_WILCARD_MIN_LENGTH = AppPropertiesService.getProperty( PROPERTY_WILDCARD_MIN_LENGTH );
-    private static final String ATTRIBUTE_USER_OBJECT_CLASS = AppPropertiesService.getProperty( PROPERTY_USER_OBJECT_CLASS );
+    private static final String ATTRIBUTE_MAPPING_OBJECT_CLASS_LIST = AppPropertiesService.getProperty( PROPERTY_MAPPING_OBJECT_CLASS_LIST );
+    private static final String ATTRIBUTE_MAPPING_ATTRIBUTE_LIST = AppPropertiesService.getProperty( PROPERTY_MAPPING_ATTRIBUTE_LIST );
 
     /**
      * Search controls for the user entry search
@@ -202,28 +207,42 @@ public class LdapBrowser
     }
 
     /**
-     * Returns a list of all attributes from ldap schema
+     * Returns a list of all attributes from ldap schema according to objectclasslist properties
      *
      * @return the attribute list
      */
     public List<String> getAllAttributes( )
     {
-        List<String> attributesNames = new ArrayList<>( );
+        List<String> attributesNames = new ArrayList<String>( );
         try
         {
             start( );
             DirContext schema = _context.getSchema( "" );
-            BasicAttributes basicAttributes = (BasicAttributes) schema.getAttributes( "ClassDefinition/" + ATTRIBUTE_USER_OBJECT_CLASS );
-            NamingEnumeration<Attribute> basicAttributesList = basicAttributes.getAll( );
-            Attribute basicAttribute = null;
-            while ( ( basicAttributesList != null ) && basicAttributesList.hasMore( ) )
+            List<String> classNamesList = new ArrayList<>();
+            NamingEnumeration classDefinitionlistBindings = schema.listBindings("ClassDefinition");
+            while (classDefinitionlistBindings.hasMore())
             {
-                basicAttribute = basicAttributesList.next( );
-                NamingEnumeration<?> attributesList = basicAttribute.getAll( );
-                while ( ( attributesList != null ) && attributesList.hasMore( ) )
-                {
-                    attributesNames.add( attributesList.next( ).toString( ) );
+                Binding classDefinitionBinding = (Binding) classDefinitionlistBindings.next();
+                classNamesList.add(classDefinitionBinding.getName());
+            }
+            for(String strObjectClass : ATTRIBUTE_MAPPING_OBJECT_CLASS_LIST.split(",")) {
+                if(classNamesList.contains(strObjectClass)) {
+                    BasicAttributes basicAttributes = (BasicAttributes) schema.getAttributes( "ClassDefinition/" + strObjectClass );
+                    NamingEnumeration<Attribute> basicAttributesList = basicAttributes.getAll( );
+                    Attribute basicAttribute = null;
+                    while ( ( basicAttributesList != null ) && basicAttributesList.hasMore( ) )
+                    {
+                        basicAttribute = basicAttributesList.next( );
+                        NamingEnumeration<?> attributesList = basicAttribute.getAll( );
+                        while ( ( attributesList != null ) && attributesList.hasMore( ) )
+                        {
+                            attributesNames.add( attributesList.next( ).toString( ) );
+                        }
+                    }
                 }
+            }
+            for(String strAttributeName : ATTRIBUTE_MAPPING_ATTRIBUTE_LIST.split(",")) {
+                attributesNames.add( strAttributeName );
             }
         }
         catch( NamingException e )
@@ -234,15 +253,15 @@ public class LdapBrowser
         finally
         {
             close( );
-        }
-        return attributesNames;
+        } 
+        return attributesNames.stream().distinct().sorted().collect(Collectors.toList());
     }
 
     /**
      * Return a complient criterial parameter according to wildcard properties
      * 
      * @param strCriteriaParameterValue
-     * @return
+     * @return a complient value 
      */
     private String checkCriteriaParameterSyntax( String strCriteriaParameterValue )
     {
@@ -261,7 +280,7 @@ public class LdapBrowser
     }
 
     /**
-     * Returns a list of users corresponding to the given parameters. An empty parameter is remplaced by the wildcard (*)
+     * Returns true if all criterias are empty
      *
      * @param strParameterLastName
      * @param strParameterFirstName
