@@ -322,12 +322,48 @@ public class LdapBrowser
         return strAttributeValue.toString( );
     }
 
-    /**
-     * Return info for debugging
-     * 
-     * @param strUserSearchFilter
-     * @return
-     */
+    public LdapUser getUserByGuid( String strGuid )
+    {
+        if ( strGuid == null || strGuid.trim( ).isEmpty( ) )
+        {
+            return null;
+        }
+
+        start( );
+        try
+        {
+            String strUserSearchFilter = "(" + ATTRIBUTE_GUID + "=" + strGuid + ")";
+            NamingEnumeration<?> userResults = LdapUtil.searchUsers( _context, strUserSearchFilter, getUserDnSearchBase( ), "", _scUserSearchControls );
+
+            if ( userResults != null && userResults.hasMore( ) )
+            {
+                SearchResult sr = (SearchResult) userResults.next( );
+                Attributes attributes = sr.getAttributes( );
+
+                if ( attributes.get( ATTRIBUTE_GUID ) != null )
+                {
+                    LdapUser user = new LdapUser( );
+                    user.setLdapGuid( (String) attributes.get( ATTRIBUTE_GUID ).get( ) );
+                    user.setLastName( checkAttributeSyntax( attributes.get( ATTRIBUTE_LAST_NAME ) ) );
+                    user.setFirstName( checkAttributeSyntax( attributes.get( ATTRIBUTE_GIVEN_NAME ) ) );
+                    user.setEmail( checkAttributeSyntax( attributes.get( ATTRIBUTE_EMAIL ) ) );
+                    user.setLdapLogin( checkAttributeSyntax( attributes.get( ATTRIBUTE_LOGIN ) ) );
+                    return user;
+                }
+            }
+            return null;
+        }
+        catch( NamingException e )
+        {
+            AppLogService.error( "Error while searching for user by GUID: " + strGuid, e );
+            return null;
+        }
+        finally
+        {
+            close( );
+        }
+    }
+
     private String getDebugInfo( String strUserSearchFilter )
     {
         StringBuffer sb = new StringBuffer( );
