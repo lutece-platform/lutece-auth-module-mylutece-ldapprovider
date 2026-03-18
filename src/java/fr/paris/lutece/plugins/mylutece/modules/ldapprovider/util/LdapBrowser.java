@@ -166,7 +166,7 @@ public class LdapBrowser
         }
         catch( CommunicationException e )
         {
-            AppLogService.error( "Error while searching for users '" + "' with search filter : " + getDebugInfo( strUserSearchFilter ), e );
+            AppLogService.error( "Error while searching for users with search filter : {}", getDebugInfo( strUserSearchFilter ), e );
             return null;
         }
         catch( NamingException e )
@@ -355,7 +355,7 @@ public class LdapBrowser
         }
         catch( NamingException e )
         {
-            AppLogService.error( "Error while searching for user by GUID: " + strGuid, e );
+            AppLogService.error( "Error while searching for user by GUID: {}", strGuid, e );
             return null;
         }
         finally
@@ -499,9 +499,9 @@ public class LdapBrowser
         {
             close( );
         }
-        AppLogService.info( "Connecting to URL " + getProviderUrl( ) );
+        AppLogService.info( "Connecting to URL {}", getProviderUrl( ) );
         _context = LdapUtil.getContext( getInitialContextProvider( ), getProviderUrl( ), getBindDn( ), getBindPassword( ) );
-        AppLogService.info( "Connected to URL " + getProviderUrl( ) );
+        AppLogService.info( "Connected to URL {}", getProviderUrl( ) );
     }
 
     /**

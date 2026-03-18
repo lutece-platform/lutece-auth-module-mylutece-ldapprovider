@@ -43,9 +43,19 @@ import fr.paris.lutece.plugins.mylutece.service.search.IUserSearchProvider;
 import fr.paris.lutece.plugins.mylutece.service.search.MyLuteceSearchUser;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.util.ReferenceList;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Named;
 
+/**
+ * IUserSearchProvider implementation for LDAP authentication.
+ */
+@ApplicationScoped
+@Named( "mylutece.myLuteceUserSearchProvider" )
 public class LdapSearchProvider implements IUserSearchProvider
 {
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<MyLuteceSearchUser> findUsers( String strParameterLastName, String strParameterGivenName, String strParameterCriteriaMail,
             ReferenceList listProviderAttribute )
@@ -74,6 +84,9 @@ public class LdapSearchProvider implements IUserSearchProvider
         return result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<String> getAllAttributes( )
     {
@@ -90,6 +103,9 @@ public class LdapSearchProvider implements IUserSearchProvider
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public MyLuteceSearchUser getUserById( String strUserId )
     {
@@ -109,12 +125,15 @@ public class LdapSearchProvider implements IUserSearchProvider
         }
         catch( Exception e )
         {
-            AppLogService.error( "Error while getting user by ID from LDAP: " + strUserId, e );
+            AppLogService.error( "Error while getting user by ID from LDAP: {}", strUserId, e );
         }
 
         return null;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public List<MyLuteceSearchUser> getUsersByIds( List<String> userIds )
     {
@@ -137,6 +156,12 @@ public class LdapSearchProvider implements IUserSearchProvider
         return result;
     }
 
+    /**
+     * Converts a LdapUser to a MyLuteceSearchUser.
+     *
+     * @param ldapUser the LDAP user to convert
+     * @return the converted MyLuteceSearchUser
+     */
     private MyLuteceSearchUser convertToMyLuteceSearchUser( LdapUser ldapUser )
     {
         MyLuteceSearchUser user = new MyLuteceSearchUser( );
