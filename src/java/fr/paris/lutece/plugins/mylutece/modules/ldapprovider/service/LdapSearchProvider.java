@@ -50,7 +50,7 @@ import jakarta.inject.Named;
  * IUserSearchProvider implementation for LDAP authentication.
  */
 @ApplicationScoped
-@Named( "mylutece.myLuteceUserSearchProvider" )
+@Named( "mylutece.ldapUserSearchProvider" )
 public class LdapSearchProvider implements IUserSearchProvider
 {
     /**
