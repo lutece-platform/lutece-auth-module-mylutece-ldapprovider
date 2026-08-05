@@ -43,7 +43,11 @@ import fr.paris.lutece.util.ldap.LdapUtil;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import javax.naming.Binding;
@@ -91,6 +95,11 @@ public class LdapBrowser
     private static final String ATTRIBUTE_WILCARD_MIN_LENGTH = AppPropertiesService.getProperty( PROPERTY_WILDCARD_MIN_LENGTH );
     private static final String ATTRIBUTE_MAPPING_OBJECT_CLASS_LIST = AppPropertiesService.getProperty( PROPERTY_MAPPING_OBJECT_CLASS_LIST );
     private static final String ATTRIBUTE_MAPPING_ATTRIBUTE_LIST = AppPropertiesService.getProperty( PROPERTY_MAPPING_ATTRIBUTE_LIST );
+
+    /**
+     * How many guids travel in one search filter
+     */
+    private static final int GUID_BATCH_SIZE = 50;
 
     /**
      * Search controls for the user entry search
@@ -204,6 +213,256 @@ public class LdapBrowser
             listUserProviderAttribute.add( userProviderAttribute );
         }
         return listUserProviderAttribute;
+    }
+
+    /**
+     * Reads the attributes the mapping declares from a search result, so a caller knows the
+     * organisation a user belongs to without a second lookup.
+     *
+     * @param attributes
+     *            the attributes returned by the directory
+     * @return the declared attributes carrying a value, name and value of each item
+     * @throws NamingException
+     *             if a value cannot be read
+     */
+    private static ReferenceList readMappedAttributes( Attributes attributes ) throws NamingException
+    {
+        ReferenceList listAttributes = new ReferenceList( );
+
+        if ( ATTRIBUTE_MAPPING_ATTRIBUTE_LIST == null || attributes == null )
+        {
+            return listAttributes;
+        }
+
+        for ( String strDeclared : ATTRIBUTE_MAPPING_ATTRIBUTE_LIST.split( "," ) )
+        {
+            String strAttribute = strDeclared.trim( );
+            String strValue = strAttribute.isEmpty( ) ? null : readFirstValue( attributes.get( strAttribute ) );
+
+            if ( strValue != null )
+            {
+                ReferenceItem item = new ReferenceItem( );
+                item.setName( strAttribute );
+                item.setCode( strValue );
+                listAttributes.add( item );
+            }
+        }
+
+        return listAttributes;
+    }
+
+    /**
+     * Returns the users carrying the given guids, resolved in one directory round trip per batch
+     * rather than one per guid: a bulk lookup would otherwise open as many connections as guids.
+     *
+     * @param listGuids
+     *            the guids to resolve
+     * @return the users found, in directory order, missing guids simply absent
+     */
+    public Collection<LdapUser> getUsersByGuids( List<String> listGuids )
+    {
+        List<LdapUser> userList = new ArrayList<>( );
+        if ( listGuids == null || listGuids.isEmpty( ) )
+        {
+            return userList;
+        }
+
+        try
+        {
+            start( );
+            for ( int nStart = 0; nStart < listGuids.size( ); nStart += GUID_BATCH_SIZE )
+            {
+                List<String> listBatch = listGuids.subList( nStart, Math.min( nStart + GUID_BATCH_SIZE, listGuids.size( ) ) );
+                userList.addAll( searchUsersByGuidBatch( listBatch ) );
+            }
+        }
+        catch( NamingException e )
+        {
+            AppLogService.error( "Error while searching for users by guid", e );
+        }
+        finally
+        {
+            close( );
+        }
+
+        return userList;
+    }
+
+    /**
+     * Searches one batch of guids with a single filter, on the already opened context.
+     *
+     * @param listGuids
+     *            the guids of the batch
+     * @return the users found
+     * @throws NamingException
+     *             if the directory refuses the search
+     */
+    private List<LdapUser> searchUsersByGuidBatch( List<String> listGuids ) throws NamingException
+    {
+        List<LdapUser> userList = new ArrayList<>( );
+        StringBuilder sbFilter = new StringBuilder( "(|" );
+        for ( String strGuid : listGuids )
+        {
+            if ( strGuid != null && !strGuid.trim( ).isEmpty( ) )
+            {
+                sbFilter.append( "(" ).append( ATTRIBUTE_GUID ).append( "=" ).append( escapeFilterValue( strGuid.trim( ) ) ).append( ")" );
+            }
+        }
+        sbFilter.append( ")" );
+
+        if ( sbFilter.length( ) <= 3 )
+        {
+            return userList;
+        }
+
+        NamingEnumeration<?> userResults = LdapUtil.searchUsers( _context, sbFilter.toString( ), getUserDnSearchBase( ), "", _scUserSearchControls );
+        while ( ( userResults != null ) && userResults.hasMore( ) )
+        {
+            SearchResult sr = (SearchResult) userResults.next( );
+            LdapUser user = toLdapUser( sr.getAttributes( ) );
+            if ( user != null )
+            {
+                userList.add( user );
+            }
+        }
+
+        return userList;
+    }
+
+    /**
+     * Builds a user from the attributes of a search result.
+     *
+     * @param attributes
+     *            the attributes returned by the directory
+     * @return the user, null when it carries no guid
+     * @throws NamingException
+     *             if an attribute cannot be read
+     */
+    private LdapUser toLdapUser( Attributes attributes ) throws NamingException
+    {
+        if ( attributes.get( ATTRIBUTE_GUID ) == null )
+        {
+            return null;
+        }
+
+        LdapUser user = new LdapUser( );
+        user.setLdapGuid( (String) attributes.get( ATTRIBUTE_GUID ).get( ) );
+        user.setLastName( checkAttributeSyntax( attributes.get( ATTRIBUTE_LAST_NAME ) ) );
+        user.setFirstName( checkAttributeSyntax( attributes.get( ATTRIBUTE_GIVEN_NAME ) ) );
+        user.setEmail( checkAttributeSyntax( attributes.get( ATTRIBUTE_EMAIL ) ) );
+        user.setLdapLogin( checkAttributeSyntax( attributes.get( ATTRIBUTE_LOGIN ) ) );
+        return user;
+    }
+
+    /**
+     * Escapes the characters a search filter would otherwise read as syntax.
+     *
+     * @param strValue
+     *            the raw value
+     * @return the value, safe to embed in a filter
+     */
+    private static String escapeFilterValue( String strValue )
+    {
+        return strValue.replace( "\\", "\\5c" ).replace( "(", "\\28" ).replace( ")", "\\29" ).replace( "*", "\\2a" ).replace( "\u0000", "\\00" );
+    }
+
+    /**
+     * Returns the distinct combinations of values the given attributes take across the user
+     * subtree. Only those attributes are fetched, so the whole directory is walked without loading
+     * full user entries. Knowing which values coexist is what lets a suggestion list narrow another.
+     *
+     * @param listAttributeNames
+     *            the attributes to enumerate together
+     * @return the distinct combinations, an attribute missing from an entry missing from its map
+     */
+    public List<Map<String, String>> getAttributeValues( List<String> listAttributeNames )
+    {
+        List<Map<String, String>> listCombinations = new ArrayList<>( );
+        if ( listAttributeNames == null || listAttributeNames.isEmpty( ) )
+        {
+            return listCombinations;
+        }
+
+        List<String> listAttributes = new ArrayList<>( );
+        StringBuilder sbFilter = new StringBuilder( "(|" );
+        for ( String strAttributeName : listAttributeNames )
+        {
+            if ( strAttributeName != null && !strAttributeName.trim( ).isEmpty( ) )
+            {
+                String strAttribute = strAttributeName.trim( );
+                listAttributes.add( strAttribute );
+                sbFilter.append( "(" ).append( strAttribute ).append( "=*)" );
+            }
+        }
+        sbFilter.append( ")" );
+
+        if ( listAttributes.isEmpty( ) )
+        {
+            return listCombinations;
+        }
+
+        Set<Map<String, String>> setCombinations = new LinkedHashSet<>( );
+        try
+        {
+            start( );
+            SearchControls searchControls = new SearchControls( );
+            searchControls.setSearchScope( getUserDnSearchScope( ) );
+            searchControls.setCountLimit( 0 );
+            searchControls.setReturningAttributes( listAttributes.toArray( new String [ 0 ] ) );
+
+            NamingEnumeration<?> results = LdapUtil.searchUsers( _context, sbFilter.toString( ), getUserDnSearchBase( ), "", searchControls );
+            while ( ( results != null ) && results.hasMore( ) )
+            {
+                SearchResult sr = (SearchResult) results.next( );
+                Map<String, String> mapCombination = new LinkedHashMap<>( );
+                for ( String strAttribute : listAttributes )
+                {
+                    String strValue = readFirstValue( sr.getAttributes( ).get( strAttribute ) );
+                    if ( strValue != null )
+                    {
+                        mapCombination.put( strAttribute, strValue );
+                    }
+                }
+                if ( !mapCombination.isEmpty( ) )
+                {
+                    setCombinations.add( mapCombination );
+                }
+            }
+        }
+        catch( NamingException e )
+        {
+            AppLogService.error( "Error while enumerating the values of attributes {}", listAttributes, e );
+        }
+        finally
+        {
+            close( );
+        }
+
+        listCombinations.addAll( setCombinations );
+        return listCombinations;
+    }
+
+    /**
+     * Reads the first value of an attribute.
+     *
+     * @param attribute
+     *            the attribute, may be null
+     * @return the value, null when the attribute is absent or blank
+     * @throws NamingException
+     *             if the value cannot be read
+     */
+    private static String readFirstValue( Attribute attribute ) throws NamingException
+    {
+        if ( attribute == null || attribute.size( ) == 0 )
+        {
+            return null;
+        }
+        Object value = attribute.get( );
+        if ( value == null || value.toString( ).trim( ).isEmpty( ) )
+        {
+            return null;
+        }
+        return value.toString( ).trim( );
     }
 
     /**
@@ -348,6 +607,7 @@ public class LdapBrowser
                     user.setFirstName( checkAttributeSyntax( attributes.get( ATTRIBUTE_GIVEN_NAME ) ) );
                     user.setEmail( checkAttributeSyntax( attributes.get( ATTRIBUTE_EMAIL ) ) );
                     user.setLdapLogin( checkAttributeSyntax( attributes.get( ATTRIBUTE_LOGIN ) ) );
+                    user.setAttributes( readMappedAttributes( attributes ) );
                     return user;
                 }
             }

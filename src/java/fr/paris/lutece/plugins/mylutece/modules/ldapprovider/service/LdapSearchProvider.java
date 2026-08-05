@@ -36,6 +36,7 @@ package fr.paris.lutece.plugins.mylutece.modules.ldapprovider.service;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import fr.paris.lutece.plugins.mylutece.modules.ldapprovider.business.LdapUser;
 import fr.paris.lutece.plugins.mylutece.modules.ldapprovider.util.LdapBrowser;
@@ -144,16 +145,43 @@ public class LdapSearchProvider implements IUserSearchProvider
             return result;
         }
 
-        for ( String userId : userIds )
+        LdapBrowser ldap = new LdapBrowser( );
+        try
         {
-            MyLuteceSearchUser user = getUserById( userId );
-            if ( user != null )
+            Collection<LdapUser> userList = ldap.getUsersByGuids( userIds );
+            if ( userList != null )
             {
-                result.add( user );
+                for ( LdapUser ldapUser : userList )
+                {
+                    result.add( convertToMyLuteceSearchUser( ldapUser ) );
+                }
             }
+        }
+        catch( Exception e )
+        {
+            AppLogService.error( "Error while getting users by IDs from LDAP", e );
         }
 
         return result;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public List<Map<String, String>> getAttributeValues( List<String> listAttributeNames )
+    {
+        LdapBrowser ldap = new LdapBrowser( );
+        try
+        {
+            List<Map<String, String>> values = ldap.getAttributeValues( listAttributeNames );
+            return values != null ? values : new ArrayList<>( );
+        }
+        catch( Exception e )
+        {
+            AppLogService.error( "Error while getting the values of attributes {} from LDAP", listAttributeNames, e );
+            return new ArrayList<>( );
+        }
     }
 
     /**
